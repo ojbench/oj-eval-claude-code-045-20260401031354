@@ -5,16 +5,16 @@ using namespace std;
 const int MAXN = 500010;
 const int HASHSIZE = 1000003;  // Prime number for better hashing
 
-// Simple hash map to track cancelled floors
+// Simple hash map to track active request count for each floor
 struct HashMap {
     int keys[HASHSIZE];
-    bool values[HASHSIZE];
+    int counts[HASHSIZE];  // Count of active requests for this floor
     bool used[HASHSIZE];
 
     HashMap() {
         for (int i = 0; i < HASHSIZE; i++) {
             used[i] = false;
-            values[i] = false;
+            counts[i] = 0;
         }
     }
 
@@ -22,29 +22,45 @@ struct HashMap {
         return ((key % HASHSIZE) + HASHSIZE) % HASHSIZE;
     }
 
-    void set(int key, bool value) {
+    void increment(int key) {
         int h = hash(key);
         while (used[h] && keys[h] != key) {
             h = (h + 1) % HASHSIZE;
         }
-        keys[h] = key;
-        values[h] = value;
-        used[h] = true;
+        if (!used[h]) {
+            keys[h] = key;
+            counts[h] = 0;
+            used[h] = true;
+        }
+        counts[h]++;
     }
 
-    bool get(int key) {
+    void decrement(int key) {
         int h = hash(key);
         int start = h;
         while (used[h]) {
             if (keys[h] == key) {
-                return values[h];
+                counts[h]--;
+                return;
+            }
+            h = (h + 1) % HASHSIZE;
+            if (h == start) break;
+        }
+    }
+
+    bool isActive(int key) {
+        int h = hash(key);
+        int start = h;
+        while (used[h]) {
+            if (keys[h] == key) {
+                return counts[h] > 0;
             }
             h = (h + 1) % HASHSIZE;
             if (h == start) break;
         }
         return false;
     }
-} cancelled;
+} requestCount;
 
 // Min heap for floors above current position
 struct MinHeap {
@@ -88,14 +104,14 @@ struct MinHeap {
     }
 
     int top() {
-        while (cnt > 0 && cancelled.get(arr[1])) {
+        while (cnt > 0 && !requestCount.isActive(arr[1])) {
             pop();
         }
         return cnt > 0 ? arr[1] : -1;
     }
 
     bool empty() {
-        while (cnt > 0 && cancelled.get(arr[1])) {
+        while (cnt > 0 && !requestCount.isActive(arr[1])) {
             pop();
         }
         return cnt == 0;
@@ -144,14 +160,14 @@ struct MaxHeap {
     }
 
     int top() {
-        while (cnt > 0 && cancelled.get(arr[1])) {
+        while (cnt > 0 && !requestCount.isActive(arr[1])) {
             pop();
         }
         return cnt > 0 ? arr[1] : -1;
     }
 
     bool empty() {
-        while (cnt > 0 && cancelled.get(arr[1])) {
+        while (cnt > 0 && !requestCount.isActive(arr[1])) {
             pop();
         }
         return cnt == 0;
@@ -165,7 +181,7 @@ int currentFloor = 0;
 bool goingUp = true;
 
 void add(int x) {
-    cancelled.set(x, false);
+    requestCount.increment(x);
     if (x > currentFloor) {
         upHeap.push(x);
     } else {
@@ -174,7 +190,7 @@ void add(int x) {
 }
 
 void cancel(int x) {
-    cancelled.set(x, true);
+    requestCount.decrement(x);
 }
 
 void action() {
@@ -182,19 +198,23 @@ void action() {
         if (!upHeap.empty()) {
             currentFloor = upHeap.top();
             upHeap.pop();
+            requestCount.decrement(currentFloor);  // Decrement when visiting
         } else if (!downHeap.empty()) {
             goingUp = false;
             currentFloor = downHeap.top();
             downHeap.pop();
+            requestCount.decrement(currentFloor);  // Decrement when visiting
         }
     } else {
         if (!downHeap.empty()) {
             currentFloor = downHeap.top();
             downHeap.pop();
+            requestCount.decrement(currentFloor);  // Decrement when visiting
         } else if (!upHeap.empty()) {
             goingUp = true;
             currentFloor = upHeap.top();
             upHeap.pop();
+            requestCount.decrement(currentFloor);  // Decrement when visiting
         }
     }
 }
