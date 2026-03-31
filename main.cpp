@@ -3,8 +3,50 @@
 using namespace std;
 
 const int MAXN = 500010;
+const int HASHSIZE = 1000003;  // Prime number for better hashing
 
-// Min heap for floors above current position (for upward direction - we want nearest, i.e., smallest)
+// Simple hash map to track cancelled floors
+struct HashMap {
+    int keys[HASHSIZE];
+    bool values[HASHSIZE];
+    bool used[HASHSIZE];
+
+    HashMap() {
+        for (int i = 0; i < HASHSIZE; i++) {
+            used[i] = false;
+            values[i] = false;
+        }
+    }
+
+    int hash(int key) {
+        return ((key % HASHSIZE) + HASHSIZE) % HASHSIZE;
+    }
+
+    void set(int key, bool value) {
+        int h = hash(key);
+        while (used[h] && keys[h] != key) {
+            h = (h + 1) % HASHSIZE;
+        }
+        keys[h] = key;
+        values[h] = value;
+        used[h] = true;
+    }
+
+    bool get(int key) {
+        int h = hash(key);
+        int start = h;
+        while (used[h]) {
+            if (keys[h] == key) {
+                return values[h];
+            }
+            h = (h + 1) % HASHSIZE;
+            if (h == start) break;
+        }
+        return false;
+    }
+} cancelled;
+
+// Min heap for floors above current position
 struct MinHeap {
     int arr[MAXN];
     int cnt;
@@ -46,56 +88,21 @@ struct MinHeap {
     }
 
     int top() {
+        while (cnt > 0 && cancelled.get(arr[1])) {
+            pop();
+        }
         return cnt > 0 ? arr[1] : -1;
     }
 
     bool empty() {
+        while (cnt > 0 && cancelled.get(arr[1])) {
+            pop();
+        }
         return cnt == 0;
-    }
-
-    void remove(int x) {
-        // Find and remove element x
-        int pos = -1;
-        for (int i = 1; i <= cnt; i++) {
-            if (arr[i] == x) {
-                pos = i;
-                break;
-            }
-        }
-        if (pos == -1) return;
-
-        arr[pos] = arr[cnt--];
-
-        // Bubble up
-        while (pos > 1) {
-            int parent = pos >> 1;
-            if (arr[parent] > arr[pos]) {
-                swap(arr[parent], arr[pos]);
-                pos = parent;
-            } else {
-                break;
-            }
-        }
-
-        // Bubble down
-        while (pos * 2 <= cnt) {
-            int left = pos * 2;
-            int right = pos * 2 + 1;
-            int minChild = left;
-            if (right <= cnt && arr[right] < arr[left]) {
-                minChild = right;
-            }
-            if (arr[pos] > arr[minChild]) {
-                swap(arr[pos], arr[minChild]);
-                pos = minChild;
-            } else {
-                break;
-            }
-        }
     }
 };
 
-// Max heap for floors below current position (for downward direction - we want nearest, i.e., largest)
+// Max heap for floors below current position
 struct MaxHeap {
     int arr[MAXN];
     int cnt;
@@ -137,62 +144,28 @@ struct MaxHeap {
     }
 
     int top() {
+        while (cnt > 0 && cancelled.get(arr[1])) {
+            pop();
+        }
         return cnt > 0 ? arr[1] : -1;
     }
 
     bool empty() {
+        while (cnt > 0 && cancelled.get(arr[1])) {
+            pop();
+        }
         return cnt == 0;
-    }
-
-    void remove(int x) {
-        // Find and remove element x
-        int pos = -1;
-        for (int i = 1; i <= cnt; i++) {
-            if (arr[i] == x) {
-                pos = i;
-                break;
-            }
-        }
-        if (pos == -1) return;
-
-        arr[pos] = arr[cnt--];
-
-        // Bubble up
-        while (pos > 1) {
-            int parent = pos >> 1;
-            if (arr[parent] < arr[pos]) {
-                swap(arr[parent], arr[pos]);
-                pos = parent;
-            } else {
-                break;
-            }
-        }
-
-        // Bubble down
-        while (pos * 2 <= cnt) {
-            int left = pos * 2;
-            int right = pos * 2 + 1;
-            int maxChild = left;
-            if (right <= cnt && arr[right] > arr[left]) {
-                maxChild = right;
-            }
-            if (arr[pos] < arr[maxChild]) {
-                swap(arr[pos], arr[maxChild]);
-                pos = maxChild;
-            } else {
-                break;
-            }
-        }
     }
 };
 
-MinHeap upHeap;   // Floors above current position (min heap for nearest)
-MaxHeap downHeap; // Floors below current position (max heap for nearest)
+MinHeap upHeap;
+MaxHeap downHeap;
 
 int currentFloor = 0;
-bool goingUp = true; // true = up, false = down
+bool goingUp = true;
 
 void add(int x) {
+    cancelled.set(x, false);
     if (x > currentFloor) {
         upHeap.push(x);
     } else {
@@ -201,38 +174,28 @@ void add(int x) {
 }
 
 void cancel(int x) {
-    if (x > currentFloor) {
-        upHeap.remove(x);
-    } else {
-        downHeap.remove(x);
-    }
+    cancelled.set(x, true);
 }
 
 void action() {
     if (goingUp) {
         if (!upHeap.empty()) {
-            // Go to nearest floor above
             currentFloor = upHeap.top();
             upHeap.pop();
         } else if (!downHeap.empty()) {
-            // No more floors above, reverse direction
             goingUp = false;
             currentFloor = downHeap.top();
             downHeap.pop();
         }
-        // else: no requests, stay still
-    } else { // going down
+    } else {
         if (!downHeap.empty()) {
-            // Go to nearest floor below
             currentFloor = downHeap.top();
             downHeap.pop();
         } else if (!upHeap.empty()) {
-            // No more floors below, reverse direction
             goingUp = true;
             currentFloor = upHeap.top();
             upHeap.pop();
         }
-        // else: no requests, stay still
     }
 }
 
@@ -247,17 +210,17 @@ int main() {
     char op[10];
     for (int i = 0; i < n; i++) {
         scanf("%s", op);
-        if (op[0] == 'a' && op[1] == 'd') { // add
+        if (op[0] == 'a' && op[1] == 'd') {
             int x;
             scanf("%d", &x);
             add(x);
-        } else if (op[0] == 'c') { // cancel
+        } else if (op[0] == 'c') {
             int x;
             scanf("%d", &x);
             cancel(x);
-        } else if (op[0] == 'l') { // locate
+        } else if (op[0] == 'l') {
             locate();
-        } else { // action
+        } else {
             action();
         }
     }
